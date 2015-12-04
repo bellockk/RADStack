@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# Tools
+DOCKER="docker"
+RM="rm"
+RMFLAGS="-fr"
+PRINT="printf"
+
+"$PRINT" "################################################################################\n"
+"$PRINT" "#                           Un-Bootstrap WebToolchain                          #\n"
+"$PRINT" "################################################################################\n"
+
+"$PRINT" "\n# Stopping Docker Containers\n\n"
+"${DOCKER}" stop mywww mypm myci myscm mydb mycm \
+                 myldap myldapadmin mydbadmin
+
+"$PRINT" "\n# Removing Docker Containers/DataVolumes\n\n"
+"${DOCKER}" rm mywww mypm myci myscm mydb mycm myldap \
+               myldapadmin mydbadmin pm-dv ci-dv scm-dv db-dv \
+               cm-dv ldapdb-dv ldapconf-dv ldapadmin-dv www-dv wwwconf-dv
+
+"$PRINT" "\n# Removing Docker Images\n\n"
+"${DOCKER}" rmi nginx jenkins gerrit mysql wordpress osixia/openldap \
+            osixia/phpldapadmin nazarpc/phpmyadmin fedora busybox \
+            bugzilla java:8-jdk
+
+"$PRINT" "\n################################################################################\n"
+"$PRINT" "#                Un-Bootstrap WebToolchain Completed Successfully              #\n"
+"$PRINT" "################################################################################\n"

@@ -1,0 +1,34 @@
+#!/bin/sh
+DATE=$1
+
+# The Path containing this script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+BACKUP_PATH=${DIR}/../backup
+
+# Stop Containers
+docker stop mywww myci myscm mydb mycm myldap myldapadmin mydbadmin
+
+# Jenkins
+docker run --rm=true --privileged=true -u root --volumes-from ci-dv -v "${BACKUP_PATH}":/backup busybox tar xvf /backup/${DATE}-ci.tgz
+
+# NGINX
+docker run --rm=true --privileged=true -u root --volumes-from www-dv -v "${BACKUP_PATH}":/backup busybox tar xvf /backup/${DATE}-www.tgz
+
+# Gerrit
+docker run --rm=true --privileged=true -u root --volumes-from scm-dv -v "${BACKUP_PATH}":/backup busybox tar xvf /backup/${DATE}-scm.tgz
+
+# MySQL
+docker run --rm=true --privileged=true -u root --volumes-from db-dv -v "${BACKUP_PATH}":/backup busybox tar xvf /backup/${DATE}-db.tgz
+
+# Wordpress
+docker run --rm=true --privileged=true -u root --volumes-from cm-dv -v "${BACKUP_PATH}":/backup busybox tar xvf /backup/${DATE}-cm.tgz
+
+# LDAP
+docker run --rm=true --privileged=true -u root --volumes-from myldap -v "${BACKUP_PATH}":/backup busybox tar xvf /backup/${DATE}-ldap.tgz
+
+# LDAP ADMIN
+docker run --rm=true --privileged=true -u root --volumes-from myldapadmin -v "${BACKUP_PATH}":/backup busybox tar xvf /backup/${DATE}-ldapadmin.tgz
+
+# Restart Containers
+docker start myldap mydb myci myscm mycm myldapadmin mydbadmin mywww

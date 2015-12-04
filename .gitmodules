@@ -1,0 +1,6 @@
+[submodule "contrib/gerrit"]
+	path = contrib/gerrit
+	url = https://github.com/bellockk/gerrit.git
+[submodule "contrib/bugzilla"]
+	path = contrib/bugzilla
+	url = https://github.com/bellockk/bugzilla.git

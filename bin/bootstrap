@@ -1,0 +1,602 @@
+#!/bin/sh
+
+# Define Parameters
+DOMAIN="example.com"
+ORGANIZATION="Example Company"
+ADMIN_EMAIL="me@${DOMAIN}"
+ADMIN_NAME="Riley Admin"
+PASSWORD="secret"
+COUNTRY="US"
+STATE=""
+LOCALITY=""
+ORGANIZATIONALUNIT=""
+COMMONNAME=""
+FACE_PATH="file://example/home/\${user}/.face"
+
+# Debug Parameters
+BUILD_GERRIT_DOCKER_IMAGE="true"
+BUILD_BUGZILLA_DOCKER_IMAGE="true"
+
+# The Path containing this script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Define Directory Locations
+CONTRIB="${DIR}/../contrib"
+
+# Build Environment
+DOCKER=docker
+GIT=git
+PRINT="printf"
+BASENAME="basename"
+PYTHON="python"
+LDAP_ADDRESS=$(${PYTHON} -c "print ','.join(['dc=%s' % dc for dc in '${DOMAIN}'.split('.')])")
+
+"$PRINT" "################################################################################\n"
+"$PRINT" "#                            Bootstrap RADStack                                #\n"
+"$PRINT" "################################################################################\n"
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                              NGINX (Phase I)                                 *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+WWW_SUBDOMAIN="www"
+WWW_IMAGE="nginx"
+
+"$PRINT" "\n# Create NGINX Configuration Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /etc/nginx\
+ --name ${WWW_SUBDOMAIN}conf-dv\
+ ${WWW_IMAGE} 
+)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                                   LDAP                                       *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+LDAP_SUBDOMAIN="ldap"
+LDAP_IMAGE="osixia/openldap"
+
+"$PRINT" "\n# Create Data Volumes\n\n"
+(set -x; "${DOCKER}" create\
+ -v /var/lib/ldap\
+ --name ${LDAP_SUBDOMAIN}db-dv\
+ ${LDAP_IMAGE}\
+)
+(set -x; "${DOCKER}" create\
+ -v /etc/ldap/slapd.d\
+ --name ${LDAP_SUBDOMAIN}conf-dv\
+ ${LDAP_IMAGE}\
+)
+
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${LDAP_SUBDOMAIN}\
+ --privileged=true\
+ --volumes-from ${LDAP_SUBDOMAIN}conf-dv:z\
+ --volumes-from ${LDAP_SUBDOMAIN}db-dv:z\
+ -e LDAP_ORGANIZATION="${ORGANIZATION}"\
+ -e LDAP_DOMAIN="${LDAP_SUBDOMAIN}.${DOMAIN}"\
+ -e LDAP_ADMIN_PASSWORD="${PASSWORD}"\
+ -p 389:389\
+ -p 636:636\
+ -d\
+ ${LDAP_IMAGE}\
+)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                              PHPLDAPAdmin                                    *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+LDAPADMIN_SUBDOMAIN="ldapadmin"
+LDAPADMIN_IMAGE="osixia/phpldapadmin"
+
+"$PRINT" "\n# Create Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /var/www/phpldapadmin\
+ --name ${LDAPADMIN_SUBDOMAIN}-dv\
+ osixia/phpldapadmin\
+)
+
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${LDAPADMIN_SUBDOMAIN}\
+ --link myldap\
+ --volumes-from ${LDAPADMIN_SUBDOMAIN}-dv:z\
+ -e PHPLDAPADMIN_LDAP_HOSTS="[{'myldap':[{'server': [{'tls': False}]},{'login': [{'bind_id': 'cn=admin,dc=ldap,${LDAP_ADDRESS}'}]}]}]"\
+ -h ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}\
+ -d\
+ ${LDAPADMIN_IMAGE}\
+)
+
+"$PRINT" "\n# Wait for PHPLDAPAdmin to start\n\n"
+(set -x; sleep 30)
+
+"$PRINT" "\n# Copy in custom object templates\n\n"
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${LDAPADMIN_SUBDOMAIN}-dv:z\
+ -v "${DIR}"/contrib/phpldapadmin:/backup\
+ busybox\
+ cp /backup/posixAccount.xml /var/www/phpldapadmin/templates/creation/.\
+)
+
+"$PRINT" "\n# Create Reverse Proxy Entry and Self Signed Certificate\n\n"
+
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ ${WWW_IMAGE}\
+ bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+upstream ${LDAPADMIN_SUBDOMAIN} {\\n\
+    server my${LDAPADMIN_SUBDOMAIN}:443;\\n\
+}\\n\
+server {\\n\
+    listen 80;\\n\
+    server_name ${LDAPADMIN_SUBDOMAIN}.${DOMAIN};\\n\
+    return 301 https://\\\$host\\\$request_uri;\\n\
+}\\n\
+server {\\n\
+    listen 443 ssl;\\n\
+    server_name ${LDAPADMIN_SUBDOMAIN}.${DOMAIN};\\n\
+    ssl_certificate /etc/nginx/ssl/${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.crt;\\n\
+    ssl_certificate_key /etc/nginx/ssl/${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key;\\n\
+    location / {\\n\
+        proxy_set_header Host \\\$host;\\n\
+        proxy_set_header X-Real-IP \\\$remote_addr;\\n\
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\\n\
+        proxy_set_header X-Forwarded-Proto \\\$scheme;\\n\
+        proxy_pass https://${LDAPADMIN_SUBDOMAIN};\\n\
+    }\\n\
+}\\n"\"" > /etc/nginx/conf.d/${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.conf\
+ && mkdir -p /etc/nginx/ssl && cd /etc/nginx/ssl\
+ && openssl genrsa -des3 -passout pass:${PASSWORD} -out ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key 1024\
+ && openssl req -new -key ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key -passin pass:${PASSWORD} -out ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.csr -subj "\""/C=$COUNTRY/ST=$STATE/L=$LOCALITY/O=$ORGANIZATION/OU=$ORGANIZATIONALUNIT/CN=$COMMONNAME/emailAddress=$ADMIN_EMAIL"\""\
+ ; cp ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key.org\
+ && openssl rsa -in ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key.org -passin pass:${PASSWORD} -out ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key\
+ && openssl x509 -req -days 365 -in ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.csr -signkey ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.key -out ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}.crt"\
+)
+
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                                  MySQL                                       *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+DB_SUBDOMAIN="db"
+DB_IMAGE="mysql"
+
+"$PRINT" "\n# Create Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /var/lib/mysql\
+ --name ${DB_SUBDOMAIN}-dv\
+ ${DB_IMAGE}\
+)
+
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${DB_SUBDOMAIN}\
+ --volumes-from ${DB_SUBDOMAIN}-dv:z\
+ -e MYSQL_ROOT_PASSWORD=${PASSWORD}\
+ -d\
+ ${DB_IMAGE}\
+)
+
+"$PRINT" "\n# Give MySQL a minute to start...\n\n"
+(set -x; sleep 60)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                               PHPMyAdmin                                     *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+DBADMIN_SUBDOMAIN="dbadmin"
+DBADMIN_IMAGE="nazarpc/phpmyadmin"
+
+"$PRINT" "\n# Start Container\n\n"
+( set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${DBADMIN_SUBDOMAIN}\
+ --link my${DB_SUBDOMAIN}\
+ -d\
+ ${DBADMIN_IMAGE}\
+)
+
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ ${WWW_IMAGE}\
+ bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+upstream ${DBADMIN_SUBDOMAIN} {\\n\
+    server my${DBADMIN_SUBDOMAIN}:80;\\n\
+}\\n\
+server {\\n\
+    listen 80;\\n\
+    server_name ${DBADMIN_SUBDOMAIN}.${DOMAIN};\\n\
+    location / {\\n\
+        proxy_http_version 1.1;\\n\
+        proxy_buffering off;\\n\
+        proxy_set_header Host \\\$host;\\n\
+        proxy_set_header X-Real-IP \\\$remote_addr;\\n\
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\\n\
+        proxy_pass http://${DBADMIN_SUBDOMAIN};\\n\
+    }\\n\
+}\\n"\"" > /etc/nginx/conf.d/${DBADMIN_SUBDOMAIN}.${DOMAIN}.conf"\
+)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                                 Jenkins                                      *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+CI_SUBDOMAIN="ci"
+CI_IMAGE="jenkins"
+
+"$PRINT" "\n# Create Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /var/jenkins_home\
+ --name ${CI_SUBDOMAIN}-dv\
+ ${CI_IMAGE}
+)
+
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${CI_SUBDOMAIN}\
+ --link my${LDAP_SUBDOMAIN}\
+ --volumes-from ${CI_SUBDOMAIN}-dv:z\
+ -p 50000:50000\
+ -d\
+ ${CI_IMAGE}
+)
+
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ ${WWW_IMAGE}\
+ bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+upstream ${CI_SUBDOMAIN} {\\n\
+    server my${CI_SUBDOMAIN}:8080;\\n\
+}\\n\
+server {\\n\
+    listen 80;\\n\
+    server_name ${CI_SUBDOMAIN}.${DOMAIN};\\n\
+    location / {\\n\
+        proxy_http_version 1.1;\\n\
+        proxy_buffering off;\\n\
+        proxy_set_header Host \\\$host;\\n\
+        proxy_set_header X-Real-IP \\\$remote_addr;\\n\
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\\n\
+        proxy_pass http://${CI_SUBDOMAIN};\\n\
+    }\\n\
+}\\n"\"" > /etc/nginx/conf.d/${CI_SUBDOMAIN}.${DOMAIN}.conf"\
+)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                                  Gerrit                                      *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+SCM_SUBDOMAIN="scm"
+SCM_IMAGE="gerrit"
+
+if [[ "$BUILD_GERRIT_DOCKER_IMAGE" == "true" ]]; then
+    "$PRINT" "\n# Build Custom Image\n\n"
+    (set -x; cd ${CONTRIB}/gerrit && docker build --rm -t gerrit .)
+fi
+
+"$PRINT" "\n# Create Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /var/gerrit\
+ --name ${SCM_SUBDOMAIN}-dv\
+ ${SCM_IMAGE}\
+)
+
+"$PRINT" "\n# Create Database\n\n"
+(set -x; "${DOCKER}" exec my${DB_SUBDOMAIN}\
+ mysql -uroot -p${PASSWORD} -e "CREATE DATABASE IF NOT EXISTS reviewdb;CREATE USER 'gerrit2'@'%' IDENTIFIED BY 'secret'; GRANT ALL ON reviewdb.* TO 'gerrit2'@'%'; FLUSH PRIVILEGES;"\
+)
+
+"$PRINT" "\n# Run Initialization\n\n"
+(set -x; "${DOCKER}" run\
+ --rm\
+ -u gerrit2\
+ --link my${LDAP_SUBDOMAIN}\
+ --link my${DB_SUBDOMAIN}\
+ --volumes-from ${SCM_SUBDOMAIN}-dv:z\
+ -p 29418:29418\
+ ${SCM_IMAGE}\
+ bash -c "printf "\""\
+[gerrit]\\n\
+    basePath = git\\n\
+    canonicalWebUrl = https://${SCM_SUBDOMAIN}.${DOMAIN}/\\n\
+[database]\\n\
+    type = mysql\\n\
+    hostname = mydb\\n\
+    database = reviewdb\\n\
+    username = gerrit2\\n\
+[auth]\\n\
+    type = LDAP\\n\
+    gitBasicAuth = true\\n\
+[ldap]\\n\
+    server = ldap://myldap\\n\
+    accountBase = ou=people,dc=ldap,${LDAP_ADDRESS}\\n\
+    groupBase = ou=groups,dc=ldap,${LDAP_ADDRESS}\\n\
+    sslVerify = false\\n\
+    referral=follow\\n\
+    accountPattern = (uid=\\\${username})\\n\
+    groupPattern = (cn=\\\${groupname})\\n\
+    accountFullName = cn\\n\
+    accountEmailAddress = mail\\n\
+    username = cn=admin,dc=ldap,${LDAP_ADDRESS}\\n\
+    password = secret\\n\
+[sendemail]\\n\
+    smtpServer = localhost\\n\
+[container]\\n\
+    user = gerrit2\\n\
+    heapLimit = 1024m\\n\
+    javaHome = /usr/lib/jvm/java-8-openjdk-amd64\\n\
+    war = /var/gerrit/bin/gerrit.war\\n\
+[sshd]\\n\
+    listenAddress = *:29418\\n\
+[httpd]\\n\
+    listenUrl = proxy-https://*:8080/\\n\
+[cache]\\n\
+    directory = cache\\n\
+[index]\\n\
+    type = LUCENE\\n\
+[plugin \\\"avatars-external\\\"]\\n\
+    url = ${FACE_PATH}\\n\\n\
+"\"" > /var/gerrit/etc/gerrit.config \
+ && printf "\""\n\
+[database]\n\
+    password = secret\n\
+[ldap]\n\
+    password = secret\n"\"" >> /var/gerrit/etc/secure.config\
+ && java -jar /var/gerrit/gerrit.war init --batch -d /var/gerrit && java -jar /var/gerrit/gerrit.war reindex -d /var/gerrit"\
+)
+
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ -u gerrit2\
+ --name my${SCM_SUBDOMAIN}\
+ --link my${LDAP_SUBDOMAIN}\
+ --link my${DB_SUBDOMAIN}\
+ --volumes-from ${SCM_SUBDOMAIN}-dv:z\
+ -p 29418:29418\
+ -d\
+ ${SCM_IMAGE}\
+)
+
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ ${WWW_IMAGE}\
+ bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+upstream ${SCM_SUBDOMAIN} {\\n\
+    server my${SCM_SUBDOMAIN}:8080;\\n\
+}\\n\
+server {\\n\
+    listen 80;\\n\
+    server_name ${SCM_SUBDOMAIN}.${DOMAIN};\\n\
+    return 301 https://\\\$host\\\$request_uri;\\n\
+}\\n\
+server {\\n\
+    listen 443 ssl;\\n\
+    server_name ${SCM_SUBDOMAIN}.${DOMAIN};\\n\
+    ssl_certificate /etc/nginx/ssl/${SCM_SUBDOMAIN}.${DOMAIN}.crt;\\n\
+    ssl_certificate_key /etc/nginx/ssl/${SCM_SUBDOMAIN}.${DOMAIN}.key;\\n\
+    location / {\\n\
+        proxy_set_header Host \\\$host;\\n\
+        proxy_set_header X-Real-IP \\\$remote_addr;\\n\
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\\n\
+        proxy_pass http://${SCM_SUBDOMAIN};\\n\
+    }\\n\
+}\\n"\"" > /etc/nginx/conf.d/${SCM_SUBDOMAIN}.${DOMAIN}.conf\
+ && mkdir -p /etc/nginx/ssl && cd /etc/nginx/ssl\
+ && openssl genrsa -des3 -passout pass:${PASSWORD} -out ${SCM_SUBDOMAIN}.${DOMAIN}.key 1024\
+ && openssl req -new -key ${SCM_SUBDOMAIN}.${DOMAIN}.key -passin pass:${PASSWORD} -out ${SCM_SUBDOMAIN}.${DOMAIN}.csr -subj "\""/C=$COUNTRY/ST=$STATE/L=$LOCALITY/O=$ORGANIZATION/OU=$ORGANIZATIONALUNIT/CN=$COMMONNAME/emailAddress=$ADMIN_EMAIL"\""\
+ ; cp ${SCM_SUBDOMAIN}.${DOMAIN}.key ${SCM_SUBDOMAIN}.${DOMAIN}.key.org\
+ && openssl rsa -in ${SCM_SUBDOMAIN}.${DOMAIN}.key.org -passin pass:${PASSWORD} -out ${SCM_SUBDOMAIN}.${DOMAIN}.key\
+ && openssl x509 -req -days 365 -in ${SCM_SUBDOMAIN}.${DOMAIN}.csr -signkey ${SCM_SUBDOMAIN}.${DOMAIN}.key -out ${SCM_SUBDOMAIN}.${DOMAIN}.crt"\
+)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                                 WordPress                                    *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+CM_SUBDOMAIN="cm"
+CM_IMAGE="wordpress"
+
+"$PRINT" "\n# Create Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /var/www/html\
+ --name ${CM_SUBDOMAIN}-dv\
+ ${CM_IMAGE}
+)
+
+# WordPress
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${CM_SUBDOMAIN}\
+ --link my${LDAP_SUBDOMAIN}\
+ --link my${DB_SUBDOMAIN}\
+ --volumes-from ${CM_SUBDOMAIN}-dv:z\
+ -e WORDPRESS_DB_HOST=my${DB_SUBDOMAIN}\
+ -e WORDPRESS_DB_USER=root\
+ -e WORDPRESS_DB_PASSWORD=${PASSWORD}\
+ -d\
+ ${CM_IMAGE}\
+)
+
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ ${WWW_IMAGE}\
+ bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+upstream ${CM_SUBDOMAIN} {\\n\
+    server my${CM_SUBDOMAIN}:80;\\n\
+}\\n\
+server {\\n\
+    listen 80;\\n\
+    server_name ${CM_SUBDOMAIN}.${DOMAIN};\\n\
+    location / {\\n\
+        proxy_http_version 1.1;\\n\
+        proxy_buffering off;\\n\
+        proxy_set_header Host \\\$host;\\n\
+        proxy_set_header X-Real-IP \\\$remote_addr;\\n\
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\\n\
+        proxy_pass http://${CM_SUBDOMAIN};\\n\
+    }\\n\
+}\\n"\"" > /etc/nginx/conf.d/${CM_SUBDOMAIN}.${DOMAIN}.conf"\
+)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                                 Bugzilla                                     *\n"
+"$PRINT" "********************************************************************************\n"
+
+# Set Variables
+PM_SUBDOMAIN="pm"
+PM_IMAGE="bugzilla"
+
+if [[ "$BUILD_BUGZILLA_DOCKER_IMAGE" == "true" ]]; then
+    "$PRINT" "\n# Build Custom Image\n\n"
+    (set -x; cd ${CONTRIB}/bugzilla && docker build --rm -t bugzilla .)
+fi
+
+"$PRINT" "\n# Create Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /usr/share/bugzilla\
+ --name ${PM_SUBDOMAIN}-dv\
+ ${PM_IMAGE}\
+)
+
+"$PRINT" "\n# Add DataBase to MySQL\n\n"
+BUGZILLADB=bugs
+BUGZILLADBUSER=bugs
+BUGZILLADBPASSWORD=bugs
+(set -x; "${DOCKER}" exec my${DB_SUBDOMAIN}\
+ mysql -uroot -p${PASSWORD} -e "\
+ CREATE DATABASE IF NOT EXISTS ${BUGZILLADB};\
+ CREATE USER '${BUGZILLADBUSER}'@'%' IDENTIFIED BY '${BUGZILLADBUSER}';\
+ GRANT ALL ON ${BUGZILLADB}.* TO '${BUGZILLADBUSER}'@'%';\
+ FLUSH PRIVILEGES;"\
+)
+
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${PM_SUBDOMAIN}\
+ --link my${DB_SUBDOMAIN}\
+ --link my${LDAP_SUBDOMAIN}\
+ --volumes-from ${PM_SUBDOMAIN}-dv:z\
+ -d\
+ ${PM_IMAGE}\
+)
+
+"$PRINT" "\n# Bugzilla One Time Setup\n\n"
+BUGZILLAADMINEMAIL="${ADMIN_EMAIL}"
+BUGZILLAADMINNAME="${ADMIN_NAME}"
+BUGZILLAADMINPASSWORD=${PASSWORD}
+(set -x; "${DOCKER}" exec my${PM_SUBDOMAIN}\
+ bash -c "printf \"\\\$db_name = '${BUGZILLADB}';\n\\\$db_user = '${BUGZILLADBUSER}';\n\\\$db_pass = '${BUGZILLADBPASSWORD}';\n\\\$db_host = 'mydb';\n\" > /etc/bugzilla/localconfig && cd /usr/share/bugzilla && ./checksetup.pl && printf '${BUGZILLAADMINEMAIL}\n${BUGZILLAADMINNAME}\n${BUGZILLAADMINPASSWORD}\n${BUGZILLAADMINPASSWORD}\n' | ./checksetup.pl "
+)
+
+"$PRINT" "\n# Restarting container to restart Apache\n\n"
+(set -x; "${DOCKER}" restart my${PM_SUBDOMAIN})
+
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ ${WWW_IMAGE}\
+ bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+upstream ${PM_SUBDOMAIN} {\\n\
+    server my${PM_SUBDOMAIN}:80;\\n\
+}\\n\
+server {\\n\
+    listen 80;\\n\
+    server_name ${PM_SUBDOMAIN}.${DOMAIN};\\n\
+    location = / {\\n\
+        return 301 http://${PM_SUBDOMAIN}.${DOMAIN}/bugzilla;\\n\
+    }\\n\
+    location / {\\n\
+        proxy_http_version 1.1;\\n\
+        proxy_buffering off;\\n\
+        proxy_set_header Host \\\$host;\\n\
+        proxy_set_header X-Real-IP \\\$remote_addr;\\n\
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\\n\
+        proxy_pass http://${PM_SUBDOMAIN};\\n\
+    }\\n\
+}\\n"\"" > /etc/nginx/conf.d/${PM_SUBDOMAIN}.${DOMAIN}.conf"\
+)
+
+"$PRINT" "\n********************************************************************************\n"
+"$PRINT" "*                              NGINX (Phase II)                                 *\n"
+"$PRINT" "********************************************************************************\n"
+
+"$PRINT" "\n# Create Data Volume\n\n"
+(set -x; "${DOCKER}" create\
+ -v /usr/share/nginx/html\
+ --name www-dv\
+ ${WWW_IMAGE}\
+)
+
+(set -x; "${DOCKER}" run\
+ --rm=true\
+ --privileged=true\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ ${WWW_IMAGE}\
+ bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+server {\\n\
+    listen 80 default_server;\\n\
+    listen [::]:80 default_server;\\n\
+    server_name _;\\n\
+    location / {\\n\
+        root /usr/share/nginx/html;\\n\
+        index index.html index.htm;\\n\
+    }\\n\
+    error_page  500 502 503 504 /50x.html;\\n\
+    location = /50x.html {\\n\
+        root /usr/share/nginx/html;\\n\
+    }\\n\
+}\\n"\"" > /etc/nginx/conf.d/default.conf"\
+)
+
+"$PRINT" "\n# Start Container\n\n"
+(set -x; "${DOCKER}" run\
+ --restart=always\
+ --name my${WWW_SUBDOMAIN}\
+ --privileged=true\
+ -u root\
+ --link my${SCM_SUBDOMAIN}:$(${BASENAME} ${SCM_IMAGE})\
+ --link my${CI_SUBDOMAIN}:$(${BASENAME} ${CI_IMAGE})\
+ --link my${CM_SUBDOMAIN}:$(${BASENAME} ${CM_IMAGE})\
+ --link my${LDAPADMIN_SUBDOMAIN}:$(${BASENAME} ${LDAPADMIN_IMAGE})\
+ --link my${DBADMIN_SUBDOMAIN}:$(${BASENAME} ${DBADMIN_IMAGE})\
+ --link my${PM_SUBDOMAIN}:$(${BASENAME} ${PM_IMAGE})\
+ --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
+ --volumes-from ${WWW_SUBDOMAIN}-dv:z\
+ -p 80:80\
+ -p 443:443\
+ -d\
+ ${WWW_IMAGE}\
+)
+
+"$PRINT" "\n################################################################################\n"
+"$PRINT" "#                 Bootstrap RADStack Completed Successfully                    #\n"
+"$PRINT" "################################################################################\n"

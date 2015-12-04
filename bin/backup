@@ -1,0 +1,35 @@
+#!/bin/sh
+# Note, if backing up to an nfs share, you will need to tell SE Linux to allow
+# mounting of an NFS share on a virtual device.
+#
+# >> setsebool -P virt_use_nfs on
+# >> setsebool -P virt_sandbox_use_nfs on
+
+# The Path containing this script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+DATE=$(date +%Y%m%d%H%M%S)
+BACKUP_PATH=${DIR}/../backup
+
+mkdir -p ${BACKUP_PATH}
+
+# Jenkins
+docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from ci-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-ci.tgz var/jenkins_home
+
+# NGINX
+docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from www-dv --volumes-from wwwconf-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-www.tgz usr/share/nginx/html etc/nginx
+
+# Gerrit
+docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from scm-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-scm.tgz var/gerrit
+
+# MySQL
+docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from db-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-db.tgz var/lib/mysql
+
+# WordPress
+docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from cm-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-cm.tgz var/www/html
+
+# LDAP
+docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from myldap -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-ldap.tgz var/lib/ldap etc/ldap/slapd.d
+
+# LDAP ADMIN
+docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from myldapadmin -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-ldapadmin.tgz var/www/phpldapadmin
