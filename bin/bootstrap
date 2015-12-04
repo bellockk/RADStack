@@ -121,7 +121,7 @@ LDAPADMIN_IMAGE="osixia/phpldapadmin"
  --rm=true\
  --privileged=true\
  --volumes-from ${LDAPADMIN_SUBDOMAIN}-dv:z\
- -v "${DIR}"/contrib/phpldapadmin:/backup\
+ -v "${DIR}"/../share/phpldapadmin:/backup\
  busybox\
  cp /backup/posixAccount.xml /var/www/phpldapadmin/templates/creation/.\
 )
