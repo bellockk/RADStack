@@ -513,7 +513,7 @@ BUGZILLAADMINEMAIL="${ADMIN_EMAIL}"
 BUGZILLAADMINNAME="${ADMIN_NAME}"
 BUGZILLAADMINPASSWORD=${PASSWORD}
 (set -x; "${DOCKER}" exec my${PM_SUBDOMAIN}\
- bash -c "printf \"\\\$db_name = '${BUGZILLADB}';\n\\\$db_user = '${BUGZILLADBUSER}';\n\\\$db_pass = '${BUGZILLADBPASSWORD}';\n\\\$db_host = 'mydb';\n\" > /etc/bugzilla/localconfig && cd /usr/share/bugzilla && ./checksetup.pl && printf '${BUGZILLAADMINEMAIL}\n${BUGZILLAADMINNAME}\n${BUGZILLAADMINPASSWORD}\n${BUGZILLAADMINPASSWORD}\n' | ./checksetup.pl "
+ bash -c "printf \"\\\$db_name = '${BUGZILLADB}';\n\\\$db_user = '${BUGZILLADBUSER}';\n\\\$db_pass = '${BUGZILLADBPASSWORD}';\n\\\$db_host = 'mydb';\n\" > /etc/bugzilla/localconfig && cd /usr/share/bugzilla && ./checksetup.pl && printf \"${BUGZILLAADMINEMAIL}\n${BUGZILLAADMINNAME}\n${BUGZILLAADMINPASSWORD}\n${BUGZILLAADMINPASSWORD}\n\" | ./checksetup.pl "
 )
 
 "$PRINT" "\n# Restarting container to restart Apache\n\n"
