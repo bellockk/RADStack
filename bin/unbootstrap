@@ -7,7 +7,7 @@ RMFLAGS="-fr"
 PRINT="printf"
 
 "$PRINT" "################################################################################\n"
-"$PRINT" "#                           Un-Bootstrap WebToolchain                          #\n"
+"$PRINT" "#                           Un-Bootstrap RADStack                              #\n"
 "$PRINT" "################################################################################\n"
 
 "$PRINT" "\n# Stopping Docker Containers\n\n"
@@ -25,5 +25,5 @@ PRINT="printf"
             bugzilla java:8-jdk
 
 "$PRINT" "\n################################################################################\n"
-"$PRINT" "#                Un-Bootstrap WebToolchain Completed Successfully              #\n"
+"$PRINT" "#                Un-Bootstrap RADStack Completed Successfully                  #\n"
 "$PRINT" "################################################################################\n"
