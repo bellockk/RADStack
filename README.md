@@ -87,7 +87,7 @@ RADStack includes the following capabilities, in layers that are abstractly name
    12. In the `Manager DN` entry field, enter `cn=admin,dc=ldap,dc=example,dc=com`
    13. In the `Manager Password` entry field enter `secret`
    14. In the `Display Name LDAP attribute` entry field, enter `cn`
-   14. In the `Email Address LDAP attribute` entry field, enter `Email`
+   14. In the `Email Address LDAP attribute` entry field, enter `mail`
    15. In the `Authorization` group, check `Logged-in users can do anything`
    16. Click the `Save` button at the bottom of the screen.
 8. Bind Project Managment to LDAP
@@ -97,17 +97,17 @@ RADStack includes the following capabilities, in layers that are abstractly name
    4. Click on the `urlbase` link.
    5. In the `urlbase` entry field, enter `http://pm.example.com/bugzilla`, and click the `Save Changes` button.
    6. In the frame on the left side of the screen, click the `LDAP` link.
-   6. In the entry field `LDAPserver`, enter `ldap://myldap`.
+   6. In the entry field `LDAPserver`, enter `myldap`.
    7. In the entry field `LDAPbinddn`, enter `cn=admin,dc=ldap,dc=example,dc=com:secret`.
    8. In the entry field `LDAPBaseDN`, enter `ou=people,dc=ldap,dc=example,dc=com`.
    9. In the entry field `LDAPuidattribute`, enter `uid`.
-   10. In the entry field `LDAPmailattribute`, enter `Email`.
+   10. In the entry field `LDAPmailattribute`, enter `mail`.
    11. Click the `Save Changes` button.
    12. In the frame on the left side of the screen, click `User Authentication`.
    13. In the group `user_verify_class`, use the up/down arrows to move `LDAP` to the top of the list, and move `RADIUS` to the bottom.
    14. In the group `requirelogin` check the `On` button.
    15. Click the `Save Changes` button.
-   16. Log out, and log back in with ldap credentials.
+   16. Log out, and log back in with ldap credentials.  Note that the first login must be made with the uid/password.  After that, the login can be made with the email/password or uid/password.
 9. Bind Content Managment to LDAP (Under Development)
    1. Go to http://cm.example.com in a web browser.
    2. Click the `Continue` button.
