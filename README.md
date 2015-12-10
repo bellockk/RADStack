@@ -90,3 +90,14 @@ RADStack includes the following capabilities, in layers that are abstractly name
    14. In the `Email Address LDAP attribute` entry field, enter `Email`
    15. In the `Authorization` group, check `Logged-in users can do anything`
    16. Click the `Save` button at the bottom of the screen.
+8. Bind Content Managment to LDAP (Under Development)
+   1. Go to http://cm.example.com in a web browser.
+   2. Click the `Continue` button.
+   3. Enter an approriate value in the `Site Title` entry field.
+   4. Enter a temporary username/password/email in the appropriate fields and click the `Install WordPress` button.
+   5. Click the `Log In` button.
+   6. Use your temporary username/password to log in.
+   7. Click on the `Plugins` link on the frame on the left side of the page.
+   8. Next to the `Plugins` title, click the `Add New` button.
+   9. In the `Search Plugins` entry field, enter `LDAP` and press enter.
+
