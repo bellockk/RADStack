@@ -68,7 +68,7 @@ RADStack includes the following capabilities, in layers that are abstractly name
    29. In the right frame labeled `cn=users` click the link labeled `Add new attribute`.
    30. From the option menu that appears select `memberUid`, enter `1000` in the entry field, and click `Update Object` at the bottom of the screen.
    31. Click the `Update Object` button.
-6 Configure Software Configuration Management.
+6. Configure Software Configuration Management.
    1. Go to http://scm.example.com in a web browser.
    2. Click on the `Sign In` link in the top right hand corner of the page.
    3. Enter the userid and password of the account you created above.  This user is now the gerrit site administrator.
