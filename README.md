@@ -72,3 +72,21 @@ RADStack includes the following capabilities, in layers that are abstractly name
    1. Go to http://scm.example.com in a web browser.
    2. Click on the `Sign In` link in the top right hand corner of the page.
    3. Enter the userid and password of the account you created above.  This user is now the gerrit site administrator.
+7. Bind Continuous Integration to LDAP
+   1. Go to http://ci.example.com in a web browser.
+   2. Click on `Manage Jenkins` on the left side of the page.
+   3. Click on the `Setup Security` button near the top right of the page.
+   4. Check the box labeled `Enable security`.
+   5. In the fields that open up, under `Security Realm` check `LDAP`.
+   6. In the next field that opens up, labeled `Server` enter `ldap://myldap` and click the `Advanced` button.
+   7. In the `root DN` entry field, enter `dc=ldap,dc=example,dc=com`
+   8. In the `User search base` entry field, enter `ou=people`
+   9. In the `User search filter` entry field, enter `uid={0}`
+   10. In the `Group search base` entry field, enter `ou=groups`
+   11. In the `Group search filter` entry field, enter `cn={0}`
+   12. In the `Manager DN` entry field, enter `cn=admin,dc=ldap,dc=example,dc=com`
+   13. In the `Manager Password` entry field enter `secret`
+   14. In the `Display Name LDAP attribute` entry field, enter `cn`
+   14. In the `Email Address LDAP attribute` entry field, enter `Email`
+   15. In the `Authorization` group, check `Logged-in users can do anything`
+   16. Click the `Save` button at the bottom of the screen.
