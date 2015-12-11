@@ -442,6 +442,16 @@ CM_IMAGE="wordpress"
  ${CM_IMAGE}\
 )
 
+"$PRINT" "\n# Install Dependent Packages for LDAP Authentication\n\n"
+(set -x; "${DOCKER}" exec my${CM_SUBDOMAIN} bash -c "\
+ apt-get update && apt-get install -y libldap2-dev libmcrypt-dev\
+ && ln -fs /usr/lib/x86_64-linux-gnu/libldap.so /usr/lib/\
+ && docker-php-ext-install ldap mcrypt"\
+)
+
+"$PRINT" "\n# Re-Start Container\n\n"
+(set -x; "${DOCKER}" restart my${CM_SUBDOMAIN})
+
 (set -x; "${DOCKER}" run\
  --rm=true\
  --privileged=true\
