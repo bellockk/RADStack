@@ -107,7 +107,7 @@ LDAPADMIN_IMAGE="osixia/phpldapadmin"
  --name my${LDAPADMIN_SUBDOMAIN}\
  --link myldap\
  --volumes-from ${LDAPADMIN_SUBDOMAIN}-dv:z\
- -e PHPLDAPADMIN_LDAP_HOSTS="[{'myldap':[{'server': [{'tls': False}]},{'login': [{'bind_id': 'cn=admin,dc=ldap,${LDAP_ADDRESS}'}]}]}]"\
+ -e PHPLDAPADMIN_LDAP_HOSTS="#PYTHON2BASH:[{'myldap':[{'server': [{'tls': False}]},{'login': [{'bind_id': 'cn=admin,dc=ldap,${LDAP_ADDRESS}'}]}]}]"\
  -h ${LDAPADMIN_SUBDOMAIN}.${DOMAIN}\
  -d\
  ${LDAPADMIN_IMAGE}\
