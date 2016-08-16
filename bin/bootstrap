@@ -281,6 +281,14 @@ server {\\n\
 }\\n"\"" > /etc/nginx/conf.d/${CI_SUBDOMAIN}.${DOMAIN}.conf"\
 )
 
+"$PRINT" "\n# Wait for Jenkins to start\n\n"
+(set -x; sleep 30)
+
+"$PRINT" "Determining Jenkins Admin Pasword:\n"
+(set -x; "${DOCKER}" exec my${CI_SUBDOMAIN}\
+ bash -c "cat /var/jenkins_home/secrets/initialAdminPassword"
+)
+
 "$PRINT" "\n********************************************************************************\n"
 "$PRINT" "*                                  Gerrit                                      *\n"
 "$PRINT" "********************************************************************************\n"
