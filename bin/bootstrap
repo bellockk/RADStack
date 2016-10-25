@@ -187,6 +187,7 @@ DB_IMAGE="mysql"
  -e MYSQL_ROOT_PASSWORD=${PASSWORD}\
  -d\
  ${DB_IMAGE}\
+ --sql-mode=ONLY_FULL_GROUP_BY,NO_AUTO_CREATE_USER,ERROR_FOR_DIVISION_BY_ZERO\
 )
 
 "$PRINT" "\n# Give MySQL a minute to start...\n\n"
@@ -295,12 +296,7 @@ server {\\n\
 
 # Set Variables
 SCM_SUBDOMAIN="scm"
-SCM_IMAGE="gerrit"
-
-if [[ "$BUILD_GERRIT_DOCKER_IMAGE" == "true" ]]; then
-    "$PRINT" "\n# Build Custom Image\n\n"
-    (set -x; cd ${CONTRIB}/gerrit && docker build --rm -t gerrit .)
-fi
+SCM_IMAGE="gerritforge/gerrit-centos7"
 
 "$PRINT" "\n# Create Data Volume\n\n"
 (set -x; "${DOCKER}" create\
@@ -311,13 +307,13 @@ fi
 
 "$PRINT" "\n# Create Database\n\n"
 (set -x; "${DOCKER}" exec my${DB_SUBDOMAIN}\
- mysql -uroot -p${PASSWORD} -e "CREATE DATABASE IF NOT EXISTS reviewdb;CREATE USER 'gerrit2'@'%' IDENTIFIED BY 'secret'; GRANT ALL ON reviewdb.* TO 'gerrit2'@'%'; FLUSH PRIVILEGES;"\
+ mysql -uroot -p${PASSWORD} -e "CREATE DATABASE IF NOT EXISTS reviewdb;ALTER DATABASE reviewdb charset=latin1;CREATE USER 'gerrit'@'%' IDENTIFIED BY 'secret'; GRANT ALL ON reviewdb.* TO 'gerrit'@'%'; FLUSH PRIVILEGES;"\
 )
 
 "$PRINT" "\n# Run Initialization\n\n"
 (set -x; "${DOCKER}" run\
  --rm\
- -u gerrit2\
+ -u gerrit\
  --link my${LDAP_SUBDOMAIN}\
  --link my${DB_SUBDOMAIN}\
  --volumes-from ${SCM_SUBDOMAIN}-dv:z\
@@ -331,7 +327,7 @@ fi
     type = mysql\\n\
     hostname = mydb\\n\
     database = reviewdb\\n\
-    username = gerrit2\\n\
+    username = gerrit\\n\
 [auth]\\n\
     type = LDAP\\n\
     gitBasicAuth = true\\n\
@@ -350,9 +346,9 @@ fi
 [sendemail]\\n\
     smtpServer = localhost\\n\
 [container]\\n\
-    user = gerrit2\\n\
+    user = gerrit\\n\
     heapLimit = 1024m\\n\
-    javaHome = /usr/lib/jvm/java-8-openjdk-amd64\\n\
+    javaHome = \$(readlink -f /usr/bin/java | sed 's:/bin/java::')\\n\
     war = /var/gerrit/bin/gerrit.war\\n\
 [sshd]\\n\
     listenAddress = *:29418\\n\
@@ -370,13 +366,15 @@ fi
     password = secret\n\
 [ldap]\n\
     password = secret\n"\"" >> /var/gerrit/etc/secure.config\
- && java -jar /var/gerrit/gerrit.war init --batch -d /var/gerrit && java -jar /var/gerrit/gerrit.war reindex -d /var/gerrit"\
+ && java -jar /var/gerrit/bin/gerrit.war init --batch -d /var/gerrit\
+ && java -jar /var/gerrit/bin/gerrit.war reindex -d /var/gerrit"\
 )
+# && java -jar /var/gerrit/gerrit.war init --batch -d /var/gerrit && java -jar /var/gerrit/gerrit.war reindex -d /var/gerrit"\
 
 "$PRINT" "\n# Start Container\n\n"
 (set -x; "${DOCKER}" run\
  --restart=always\
- -u gerrit2\
+ -u gerrit\
  --name my${SCM_SUBDOMAIN}\
  --link my${LDAP_SUBDOMAIN}\
  --link my${DB_SUBDOMAIN}\
