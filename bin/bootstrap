@@ -1,5 +1,9 @@
 #!/bin/sh
 
+# Notes:
+# IPV4 Forwarding must be turned on in the host.
+# sysctl -w net.ipv4.ip_forward=1
+
 # Define Parameters
 DOMAIN="example.com"
 ORGANIZATION="Example Company"
@@ -11,7 +15,7 @@ STATE=""
 LOCALITY=""
 ORGANIZATIONALUNIT=""
 COMMONNAME=""
-FACE_PATH="file://example/home/\${user}/.face"
+FACE_PATH="file:///example/home/\\\${user}/.face"
 
 # Debug Parameters
 BUILD_GERRIT_DOCKER_IMAGE="true"
@@ -187,6 +191,7 @@ DB_IMAGE="mysql"
  -e MYSQL_ROOT_PASSWORD=${PASSWORD}\
  -d\
  ${DB_IMAGE}\
+ --sql-mode=ONLY_FULL_GROUP_BY,NO_AUTO_CREATE_USER,ERROR_FOR_DIVISION_BY_ZERO\
 )
 
 "$PRINT" "\n# Give MySQL a minute to start...\n\n"
@@ -198,13 +203,14 @@ DB_IMAGE="mysql"
 
 # Set Variables
 DBADMIN_SUBDOMAIN="dbadmin"
-DBADMIN_IMAGE="nazarpc/phpmyadmin"
+DBADMIN_IMAGE="phpmyadmin/phpmyadmin"
 
 "$PRINT" "\n# Start Container\n\n"
 ( set -x; "${DOCKER}" run\
  --restart=always\
  --name my${DBADMIN_SUBDOMAIN}\
  --link my${DB_SUBDOMAIN}\
+ -e PMA_HOST=my${DB_SUBDOMAIN}\
  -d\
  ${DBADMIN_IMAGE}\
 )
@@ -352,7 +358,7 @@ fi
 [container]\\n\
     user = gerrit2\\n\
     heapLimit = 1024m\\n\
-    javaHome = /usr/lib/jvm/java-8-openjdk-amd64\\n\
+    javaHome = \$(readlink -f /usr/bin/java | sed 's:/bin/java::')\\n\
     war = /var/gerrit/bin/gerrit.war\\n\
 [sshd]\\n\
     listenAddress = *:29418\\n\
@@ -362,6 +368,8 @@ fi
     directory = cache\\n\
 [index]\\n\
     type = LUCENE\\n\
+[gitweb]\\n\
+    type = gitweb\\n\
 [plugin \\\"avatars-external\\\"]\\n\
     url = ${FACE_PATH}\\n\\n\
 "\"" > /var/gerrit/etc/gerrit.config \
