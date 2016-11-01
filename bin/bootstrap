@@ -414,6 +414,7 @@ server {\\n\
     ssl_certificate /etc/nginx/ssl/${SCM_SUBDOMAIN}.${DOMAIN}.crt;\\n\
     ssl_certificate_key /etc/nginx/ssl/${SCM_SUBDOMAIN}.${DOMAIN}.key;\\n\
     location / {\\n\
+        client_max_body_size 5G;\\n\
         proxy_set_header Host \\\$host;\\n\
         proxy_set_header X-Real-IP \\\$remote_addr;\\n\
         proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\\n\
