@@ -19,8 +19,12 @@ PRINT="printf"
                ldapdb-dv ldapconf-dv ldapadmin-dv
 
 "$PRINT" "\n# Removing Docker Images\n\n"
-"${DOCKER}" rmi nginx jenkins gerrit osixia/openldap \
+"${DOCKER}" rmi nginx jenkins gerritcodereview/gerrit osixia/openldap \
             osixia/phpldapadmin busybox
+
+"$PRINT" "\n# Removing Docker Networks\n\n"
+"${DOCKER}" network rm mynetwork
+
 
 "$PRINT" "\n################################################################################\n"
 "$PRINT" "#                Un-Bootstrap RADStack Completed Successfully                  #\n"
