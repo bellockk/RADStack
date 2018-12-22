@@ -22,12 +22,6 @@ docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from www-dv
 # Gerrit
 docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from scm-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-scm.tgz var/gerrit
 
-# MySQL
-docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from db-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-db.tgz var/lib/mysql
-
-# WordPress
-docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from cm-dv -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-cm.tgz var/www/html
-
 # LDAP
 docker run --rm=true --workdir=/ --privileged=true -u root --volumes-from myldap -v "${BACKUP_PATH}":/backup busybox tar zcvf /backup/${DATE}-ldap.tgz var/lib/ldap etc/ldap/slapd.d
 
