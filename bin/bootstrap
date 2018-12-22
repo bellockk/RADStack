@@ -15,11 +15,6 @@ STATE=""
 LOCALITY=""
 ORGANIZATIONALUNIT=""
 COMMONNAME=""
-FACE_PATH="file:///example/home/\\\${user}/.face"
-
-# Debug Parameters
-BUILD_GERRIT_DOCKER_IMAGE="true"
-BUILD_BUGZILLA_DOCKER_IMAGE="true"
 
 # The Path containing this script
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -43,7 +38,7 @@ LDAP_ADDRESS=$(${PYTHON} -c "print ','.join(['dc=%s' % dc for dc in '${DOMAIN}'.
 "$PRINT" "*                              Create Network                                  *\n"
 "$PRINT" "********************************************************************************\n"
 NETWORK="mynetwork"
-(set -x; "${DOCKER}" network create "${NETWORK}"
+(set -x; "${DOCKER}" network create "${NETWORK}")
 
 "$PRINT" "\n********************************************************************************\n"
 "$PRINT" "*                                   NGINX                                      *\n"
@@ -280,23 +275,13 @@ server {\\n\
 
 # Set Variables
 SCM_SUBDOMAIN="scm"
-SCM_IMAGE="gerrit"
-
-if [[ "$BUILD_GERRIT_DOCKER_IMAGE" == "true" ]]; then
-    "$PRINT" "\n# Build Custom Image\n\n"
-    (set -x; cd ${CONTRIB}/gerrit && docker build --rm -t gerrit .)
-fi
+SCM_IMAGE="gerritcodereview/gerrit"
 
 "$PRINT" "\n# Create Data Volume\n\n"
 (set -x; "${DOCKER}" create\
  -v /var/gerrit\
  --name ${SCM_SUBDOMAIN}-dv\
  ${SCM_IMAGE}\
-)
-
-"$PRINT" "\n# Create Database\n\n"
-(set -x; "${DOCKER}" exec my${DB_SUBDOMAIN}\
- mysql -uroot -p${PASSWORD} -e "CREATE DATABASE IF NOT EXISTS reviewdb;CREATE USER 'gerrit2'@'%' IDENTIFIED BY 'secret'; GRANT ALL ON reviewdb.* TO 'gerrit2'@'%'; FLUSH PRIVILEGES;"\
 )
 
 "$PRINT" "\n# Run Initialization\n\n"
@@ -348,8 +333,6 @@ fi
     type = LUCENE\\n\
 [gitweb]\\n\
     type = gitweb\\n\
-[plugin \\\"avatars-external\\\"]\\n\
-    url = ${FACE_PATH}\\n\\n\
 "\"" > /var/gerrit/etc/gerrit.config \
  && printf "\""\n\
 [database]\n\
