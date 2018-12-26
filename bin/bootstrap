@@ -47,6 +47,7 @@ NETWORK="mynetwork"
 # Set Variables
 WWW_SUBDOMAIN="www"
 WWW_IMAGE="nginx"
+OPENSSL_IMAGE="centurylink/openssl"
 
 "$PRINT" "\n# Create NGINX Configuration Data Volume\n\n"
 (set -x; "${DOCKER}" create\
@@ -67,7 +68,7 @@ WWW_IMAGE="nginx"
  --privileged=true\
  --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
  ${WWW_IMAGE}\
- bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+ sh -c "mkdir -p /etc/nginx/conf.d && printf "\""\
 server {\\n\
     listen 80 default_server;\\n\
     listen [::]:80 default_server;\\n\
@@ -181,8 +182,8 @@ LDAPADMIN_IMAGE="osixia/phpldapadmin"
  --rm=true\
  --privileged=true\
  --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
- ${WWW_IMAGE}\
- bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+ ${OPENSSL_IMAGE}\
+ sh -c "mkdir -p /etc/nginx/conf.d && printf "\""\
 upstream ${LDAPADMIN_SUBDOMAIN} {\\n\
     server my${LDAPADMIN_SUBDOMAIN}:443;\\n\
 }\\n\
@@ -242,8 +243,8 @@ CI_IMAGE="jenkins"
  --rm=true\
  --privileged=true\
  --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
- ${WWW_IMAGE}\
- bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+ ${OPENSSL_IMAGE}\
+ sh -c "mkdir -p /etc/nginx/conf.d && printf "\""\
 upstream ${CI_SUBDOMAIN} {\\n\
     server my${CI_SUBDOMAIN}:8080;\\n\
 }\\n\
@@ -358,8 +359,8 @@ SCM_IMAGE="gerritcodereview/gerrit"
  --rm=true\
  --privileged=true\
  --volumes-from ${WWW_SUBDOMAIN}conf-dv:z\
- ${WWW_IMAGE}\
- bash -c "mkdir -p /etc/nginx/conf.d && printf "\""\
+ ${OPENSSL_IMAGE}\
+ sh -c "mkdir -p /etc/nginx/conf.d && printf "\""\
 upstream ${SCM_SUBDOMAIN} {\\n\
     server my${SCM_SUBDOMAIN}:8080;\\n\
 }\\n\
